@@ -69,6 +69,18 @@ settings once, on wifi, and it is cached from then on.
 
 It then runs full screen with no browser bars, and works without a signal.
 
+## Other games
+
+Only two things in here are about Phasmophobia. **Captions, the left/right display, the direction
+arrows and the footprints work with any game, any console, or a film** — they never knew what game
+they were watching.
+
+* **Sound names.** Settings has a *Which game* choice. Phasmophobia mode only allows the 91 sounds
+  that exist in that game, which keeps wrong guesses down. Switch it to **Any game** and it names
+  everything the model recognises: gunshots, engines, alarms, glass, water, dogs, doors and so on.
+* **The phrase board.** The 63 lines are about ghost hunting. Edit `app/phrases/phrases.json` and
+  drop in your own clips, or use *Type something else*, which works for anything.
+
 ## What it does not do
 
 * **It cannot hear a game running on the same phone.** Neither iOS nor Android lets one app capture

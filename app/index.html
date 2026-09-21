@@ -94,6 +94,14 @@
   <p class="hint" id="cap-status">Off. Downloads a speech model the first time, about 40 MB.</p>
 
   <label class="row"><input type="checkbox" id="chk-sounds" checked> Name sounds</label>
+
+  <label for="sel-game">Which game</label>
+  <select id="sel-game">
+    <option value="phasmophobia">Phasmophobia — only sounds this game makes</option>
+    <option value="all">Any game — name everything it recognises</option>
+  </select>
+  <p class="hint">Phasmophobia mode hides sounds the game never makes, so there are fewer wrong
+    guesses. Any game turns that filter off: useful for shooters, horror, anything else, or a film.</p>
   <label class="row"><input type="checkbox" id="chk-wake" checked> Keep the screen awake</label>
 
   <label for="sel-out">Speak through</label>

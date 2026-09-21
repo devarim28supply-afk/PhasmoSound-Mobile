@@ -310,6 +310,12 @@ $("chk-captions").addEventListener("change", (e) => {
   drawCaptions();
 });
 $("chk-sounds").addEventListener("change", (e) => { prefs.sounds = e.target.checked; savePrefs(); });
+$("sel-game").addEventListener("change", (e) => {
+  prefs.phasmoOnly = e.target.value === "phasmophobia";
+  // outside Phasmophobia the environment sounds (weather, traffic, animals) are often the point
+  prefs.hide = prefs.phasmoOnly ? ["env"] : [];
+  savePrefs();
+});
 $("chk-wake").addEventListener("change", (e) => { prefs.wake = e.target.checked; savePrefs(); keepAwake(prefs.wake); });
 
 $("sel-input").addEventListener("change", async (e) => {
@@ -390,6 +396,7 @@ $("lbl-sens").textContent = `${prefs.minDb} dB`;
 $("chk-captions").checked = prefs.captions;
 $("chk-sounds").checked = prefs.sounds;
 $("chk-wake").checked = prefs.wake;
+$("sel-game").value = prefs.phasmoOnly ? "phasmophobia" : "all";
 $("build-info").textContent = `PhasmoSound Mobile ${BUILD}`;
 
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
