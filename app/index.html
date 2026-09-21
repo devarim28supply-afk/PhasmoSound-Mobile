@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#0d0e12">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="PhasmoSound">
+<title>PhasmoSound Mobile</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<!-- ─────────── start screen: needs a tap, browsers will not open a mic without one ─────────── -->
+<section id="start" class="screen">
+  <h1>PhasmoSound</h1>
+  <p class="sub">See the game's sounds. Read what people say. Talk back.</p>
+  <button id="btn-start" class="big">Start listening</button>
+  <p class="hint" id="start-hint">
+    Plug the cable from your controller into the phone, or let the phone listen to your TV.
+  </p>
+</section>
+
+<!-- ─────────── main screen ─────────── -->
+<main id="main" hidden>
+
+  <header id="bar">
+    <span id="status-dot" class="dot"></span>
+    <span id="status-text">starting…</span>
+    <button id="btn-settings" class="icon" aria-label="Settings">⚙</button>
+  </header>
+
+  <!-- left / right level edges, and the arena between them -->
+  <div id="arena">
+    <div class="edge" id="edge-l"><span class="edge-label">L</span></div>
+
+    <div id="middle">
+      <ul id="events" aria-live="polite" aria-label="Sounds heard"></ul>
+      <div id="chips"></div>
+    </div>
+
+    <div class="edge" id="edge-r"><span class="edge-label">R</span></div>
+
+    <!-- footprints, shown when footsteps come from one side -->
+    <div class="feet" id="feet-l" hidden>👣</div>
+    <div class="feet" id="feet-r" hidden>👣</div>
+  </div>
+
+  <!-- live captions -->
+  <div id="captions" aria-live="polite" aria-label="Captions">
+    <p class="cap-idle" id="cap-idle">Captions will appear here when someone speaks.</p>
+  </div>
+
+  <button id="btn-speak" class="speak">Speak</button>
+</main>
+
+<!-- ─────────── phrase wheel ─────────── -->
+<section id="wheel" class="screen overlay" hidden>
+  <div id="wheel-ring" role="tablist" aria-label="Phrase categories"></div>
+  <ul id="wheel-lines" aria-label="Phrases"></ul>
+  <div class="wheel-actions">
+    <button id="btn-type" class="ghost">Type something else</button>
+    <button id="btn-wheel-close" class="ghost">Close</button>
+  </div>
+</section>
+
+<!-- ─────────── free text ─────────── -->
+<section id="typer" class="screen overlay" hidden>
+  <label for="type-input">Type what to say</label>
+  <textarea id="type-input" rows="3" autocomplete="off" autocorrect="on"></textarea>
+  <div class="wheel-actions">
+    <button id="btn-type-say" class="big">Say it</button>
+    <button id="btn-type-close" class="ghost">Cancel</button>
+  </div>
+  <p class="hint">Uses the phone's own voice. Wheel phrases use the better recorded voice.</p>
+</section>
+
+<!-- ─────────── settings ─────────── -->
+<section id="settings" class="screen overlay" hidden>
+  <h2>Settings</h2>
+
+  <label for="sel-input">Sound coming from</label>
+  <select id="sel-input"></select>
+  <p class="hint">Pick your cable or audio adapter. "Default" is the phone's own microphone.</p>
+
+  <label for="rng-sens">Sensitivity <span id="lbl-sens" class="val"></span></label>
+  <input type="range" id="rng-sens" min="-60" max="-25" step="1">
+  <p class="hint">Move right to catch quieter sounds, left to ignore background noise.</p>
+
+  <label class="row"><input type="checkbox" id="chk-captions"> Live captions</label>
+  <p class="hint" id="cap-status">Off. Downloads a speech model the first time, about 40 MB.</p>
+
+  <label class="row"><input type="checkbox" id="chk-sounds" checked> Name sounds</label>
+  <label class="row"><input type="checkbox" id="chk-wake" checked> Keep the screen awake</label>
+
+  <label for="sel-out">Speak through</label>
+  <select id="sel-out"><option value="">Default output</option></select>
+  <p class="hint">Where your spoken lines are played. Choose the cable so your team hears them.</p>
+
+  <div class="wheel-actions">
+    <button id="btn-settings-close" class="big">Done</button>
+  </div>
+  <p class="hint" id="build-info"></p>
+</section>
+
+<script src="js/main.js" type="module"></script>
+</body>
+</html>

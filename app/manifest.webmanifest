@@ -1,0 +1,17 @@
+{
+  "name": "PhasmoSound Mobile",
+  "short_name": "PhasmoSound",
+  "description": "See the game's sounds, read live captions, and speak to your team. An accessibility overlay for deaf and hard of hearing players, on a phone.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0d0e12",
+  "theme_color": "#0d0e12",
+  "categories": ["utilities", "games", "accessibility"],
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
