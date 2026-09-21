@@ -2,7 +2,7 @@
    with no signal; the 16 MB sound model and the speech model are cached the first time they
    are fetched, because they are large and not everyone turns captions on. */
 
-const VERSION = "v0.1.0";
+const VERSION = "v0.1.2";
 const SHELL = `shell-${VERSION}`;
 const BIG = `big-${VERSION}`;
 
@@ -60,19 +60,19 @@ self.addEventListener("fetch", (e) => {
   }
 
   if (url.origin !== location.origin) return;
+
+  // The app's own code and the voice clips: try the network first so an update is picked up
+  // immediately, and fall back to the cache when there is no signal. These files are small;
+  // only the models above are worth serving from cache first.
   e.respondWith((async () => {
     const c = await caches.open(SHELL);
-    const hit = await c.match(req, { ignoreSearch: true });
-    if (hit) {
-      fetch(req).then((r) => { if (r.ok) c.put(req, r).catch(() => {}); }).catch(() => {});
-      return hit;
-    }
     try {
       const res = await fetch(req);
       if (res.ok) c.put(req, res.clone()).catch(() => {});
       return res;
     } catch {
-      return (await c.match("./index.html")) || Response.error();
+      const hit = await c.match(req, { ignoreSearch: true });
+      return hit || (await c.match("./index.html")) || Response.error();
     }
   })());
 });

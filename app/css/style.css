@@ -26,6 +26,10 @@
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 
+/* The HTML hidden attribute has to beat the display rules further down, or every screen
+   shows at once. .feet opts out below because it fades instead of disappearing. */
+[hidden]:not(.feet) { display: none !important; }
+
 html, body {
   margin: 0; height: 100%; overflow: hidden;
   background: var(--bg); color: var(--text);
@@ -119,11 +123,15 @@ button.icon { font-size: 21px; padding: 4px 10px; color: var(--dim); }
   background: #ffffff14; color: var(--text); white-space: nowrap;
 }
 
-.feet { position: absolute; top: 50%; transform: translateY(-50%); font-size: 34px; opacity: 0; transition: opacity .15s; }
-.feet[hidden] { display: block; opacity: 0; }
+/* footprints sit just inside the level edge, not on top of it, or they get clipped */
+.feet {
+  position: absolute; top: 46%; transform: translateY(-50%);
+  font-size: 42px; line-height: 1; opacity: 0; pointer-events: none;
+  transition: opacity .15s; filter: drop-shadow(0 0 10px #000) drop-shadow(0 0 3px #000);
+}
 .feet.show { opacity: 1; }
-#feet-l { left: 2px; }
-#feet-r { right: 2px; }
+#feet-l { left: 40px; }
+#feet-r { right: 40px; }
 
 /* captions */
 #captions {
