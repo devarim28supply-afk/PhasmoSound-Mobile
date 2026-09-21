@@ -178,3 +178,8 @@ button.icon { font-size: 21px; padding: 4px 10px; color: var(--dim); }
   #events li { font-size: 25px; }
   #captions p { font-size: 23px; }
 }
+
+/* One-channel input: the two edges are showing the same sound, so stop them from
+   reading as "left" and "right". They still work as a loudness meter. */
+body.no-direction .edge-label { opacity: 0.35; }
+body.no-direction .ev-arrow { opacity: 0.4; }

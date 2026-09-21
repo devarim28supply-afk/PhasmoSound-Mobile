@@ -18,6 +18,8 @@ class Capture extends AudioWorkletProcessor {
     this.outPos = 0; this.srcIndex = 0; this.prev = 0; this.lp = 0;
     this.lpA = 1 - Math.exp((-2 * Math.PI * 7000) / sampleRate);   // anti-alias before decimating
     this.lastPost = currentTime;
+    this.channels = 0;
+    this.maxDiff = 0;   // biggest gap seen between the two sides; 0 means dual mono
   }
 
   process(inputs) {
@@ -25,12 +27,15 @@ class Capture extends AudioWorkletProcessor {
     if (!input || input.length === 0) return true;
     const L = input[0];
     const R = input.length > 1 ? input[1] : input[0];
+    this.channels = input.length;
     if (!L || L.length === 0) return true;
 
     for (let i = 0; i < L.length; i++) {
       const l = L[i], r = R[i];
       this.sumL += l * l;
       this.sumR += r * r;
+      const d = Math.abs(l - r);
+      if (d > this.maxDiff) this.maxDiff = d;
 
       // mono, low-passed, resampled to 16 kHz by linear interpolation
       const m = (l + r) * 0.5;
@@ -57,7 +62,7 @@ class Capture extends AudioWorkletProcessor {
       const levels = new Float32Array(this.levels);   // flat pairs: l, r, l, r, …
       const mono = new Float32Array(this.mono);
       this.levels.length = 0; this.mono.length = 0;
-      this.port.postMessage({ levels, mono }, [levels.buffer, mono.buffer]);
+      this.port.postMessage({ levels, mono, channels: this.channels, maxDiff: this.maxDiff }, [levels.buffer, mono.buffer]);
     }
     return true;
   }

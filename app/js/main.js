@@ -53,7 +53,74 @@ $("btn-start").addEventListener("click", async () => {
 
 function setStatus(ok, text) {
   $("status-dot").className = "dot" + (ok ? " on" : "");
-  $("status-text").textContent = text;
+  statusDevice = text;
+  paintStatus();
+}
+
+// The left/right display is only honest if the input really carries two different channels.
+// Most phones hand a web page a single mixed-down channel no matter what we ask for, so say
+// plainly which one we got instead of lighting both edges off the same sound.
+let statusDevice = "";
+let lastStereo = "";
+
+const STEREO_NOTE = {
+  stereo: "stereo",
+  mono: "mono · no left/right",
+  "dual-mono": "both sides the same · no left/right",
+  unknown: "",
+};
+
+/* Opens every input the phone will admit to having and reports how many channels it actually
+   hands over. This is the only way to know which adapter works -- the labels never say. */
+async function checkInputs() {
+  const out = $("check-out");
+  out.textContent = "checking…";
+  const devices = await listInputs();
+  const lines = [];
+
+  for (const d of devices.length ? devices : [{ deviceId: "", label: "default input" }]) {
+    let ch = 0, note = "";
+    for (const want of [{ exact: 2 }, 2]) {
+      try {
+        const s = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            deviceId: d.deviceId ? { exact: d.deviceId } : undefined,
+            echoCancellation: false, noiseSuppression: false, autoGainControl: false,
+            channelCount: want,
+          },
+        });
+        // the track settings lie on some phones, so count the channels the graph really receives
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        ch = ctx.createMediaStreamSource(s).channelCount;
+        const st = s.getAudioTracks()[0]?.getSettings?.() || {};
+        if (st.channelCount > ch) ch = st.channelCount;
+        s.getTracks().forEach((t) => t.stop());
+        await ctx.close();
+        break;
+      } catch (e) { note = e?.name === "OverconstrainedError" ? "" : (e?.name || "blocked"); }
+    }
+    const verdict = ch >= 2 ? "✓ stereo — use this one" : ch === 1 ? "mono, no left/right" : (note || "unavailable");
+    lines.push((d.label || "input") + ": " + verdict);
+  }
+
+  out.innerHTML = lines.join("<br>") +
+    "<br><br>If nothing says stereo, the adapter is a headset adapter — its microphone input is " +
+    "mono by design. You need a USB audio interface with a stereo LINE input.";
+}
+
+function paintStatus() {
+  const state = engine.stream ? engine.stereoState() : "unknown";
+  const note = STEREO_NOTE[state] || "";
+  $("status-text").textContent = note ? statusDevice + " · " + note : statusDevice;
+
+  if (state !== lastStereo) {
+    lastStereo = state;
+    const flat = state === "mono" || state === "dual-mono";
+    document.body.classList.toggle("no-direction", flat);
+    const label = flat ? "–" : null;
+    $("edge-l").querySelector(".edge-label").textContent = label ?? "L";
+    $("edge-r").querySelector(".edge-label").textContent = label ?? "R";
+  }
 }
 
 // ─────────────────────────────────────────────────────────── audio -> screen
@@ -84,6 +151,7 @@ captioner.addEventListener("error", (e) => { $("cap-status").textContent = "Capt
 function startLoops() {
   requestAnimationFrame(draw);
   classifyTimer = setInterval(() => classifySoon(0), 250);
+  setInterval(paintStatus, 1000);
 }
 
 let classifyQueued = false;
@@ -201,7 +269,10 @@ function updateAges() {
   }
 }
 
-const arrow = (a) => (a < -15 ? "←" : a > 15 ? "→" : "↑");
+const arrow = (a) => {
+  if (lastStereo === "mono" || lastStereo === "dual-mono") return "•";   // one channel: no side to point to
+  return a < -15 ? "←" : a > 15 ? "→" : "↑";
+};
 
 function drawChips(dets) {
   const box = $("chips");
@@ -317,6 +388,8 @@ $("sel-game").addEventListener("change", (e) => {
   savePrefs();
 });
 $("chk-wake").addEventListener("change", (e) => { prefs.wake = e.target.checked; savePrefs(); keepAwake(prefs.wake); });
+
+$("btn-check").addEventListener("click", () => { checkInputs().catch((e) => { $("check-out").textContent = "check failed: " + (e?.message || e); }); });
 
 $("sel-input").addEventListener("change", async (e) => {
   prefs.inputId = e.target.value; savePrefs();

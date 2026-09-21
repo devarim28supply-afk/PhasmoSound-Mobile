@@ -26,6 +26,10 @@ export class AudioEngine extends EventTarget {
     this.stream = null; this.ctx = null; this.node = null; this.src = null;
     this.deviceLabel = "";
     this.channels = 1;
+    this.realChannels = 0;    // what the worklet actually receives
+    this.maxDiff = 0;         // 0 after a few seconds means the two sides carry the same signal
+    this.heardLoud = false;   // we cannot judge stereo from silence
+    this.forcedStereo = false;
   }
 
   static db(rms) { return 20 * Math.log10(rms + 1e-7); }
@@ -33,12 +37,30 @@ export class AudioEngine extends EventTarget {
   /** Ask for an input. deviceId "" means whatever the browser thinks is default. */
   async start(deviceId = "") {
     await this.stop();
-    const audio = {
-      echoCancellation: false, noiseSuppression: false, autoGainControl: false,
-      channelCount: 2, sampleRate: 48000,
-    };
-    if (deviceId) audio.deviceId = { exact: deviceId };
-    this.stream = await navigator.mediaDevices.getUserMedia({ audio, video: false });
+    this.realChannels = 0; this.maxDiff = 0; this.heardLoud = false;
+    // Phones downmix to mono whenever the browser's voice processing is in the path, and a plain
+    // "channelCount: 2" is only a wish -- it is dropped silently. Asking for exactly 2 makes the
+    // request FAIL instead of quietly going mono, which is the only way to get real stereo out of
+    // a USB audio interface. If that fails there is no stereo to be had, so fall back and say so.
+    const base = { echoCancellation: false, noiseSuppression: false, autoGainControl: false };
+    if (deviceId) base.deviceId = { exact: deviceId };
+
+    const attempts = [
+      { ...base, channelCount: { exact: 2 }, sampleRate: 48000 },
+      { ...base, channelCount: { exact: 2 } },
+      { ...base, channelCount: 2 },
+      { ...base },
+    ];
+    let lastErr = null;
+    for (const audio of attempts) {
+      try {
+        this.stream = await navigator.mediaDevices.getUserMedia({ audio, video: false });
+        this.forcedStereo = audio.channelCount?.exact === 2;
+        lastErr = null;
+        break;
+      } catch (e) { lastErr = e; }
+    }
+    if (lastErr || !this.stream) throw lastErr || new Error("no audio input");
 
     const track = this.stream.getAudioTracks()[0];
     this.deviceLabel = track?.label || "audio input";
@@ -49,7 +71,10 @@ export class AudioEngine extends EventTarget {
     await this.ctx.audioWorklet.addModule("js/capture-worklet.js");
 
     this.src = this.ctx.createMediaStreamSource(this.stream);
-    this.node = new AudioWorkletNode(this.ctx, "capture", { numberOfInputs: 1, numberOfOutputs: 0, channelCount: 2 });
+    this.node = new AudioWorkletNode(this.ctx, "capture", {
+      numberOfInputs: 1, numberOfOutputs: 0,
+      channelCount: 2, channelCountMode: "max", channelInterpretation: "discrete",
+    });
     this.node.port.onmessage = (e) => this._onAudio(e.data);
     this.src.connect(this.node);
 
@@ -66,7 +91,9 @@ export class AudioEngine extends EventTarget {
     this.stream = null; this.ctx = null; this.node = null; this.src = null;
   }
 
-  _onAudio({ levels, mono }) {
+  _onAudio({ levels, mono, channels, maxDiff }) {
+    if (channels) this.realChannels = channels;
+    if (maxDiff > this.maxDiff) this.maxDiff = maxDiff;
     // 16 kHz ring buffer
     for (let i = 0; i < mono.length; i++) {
       this.ring[this.ringWrite] = mono[i];
@@ -98,6 +125,7 @@ export class AudioEngine extends EventTarget {
       this.levelL = dbL > this.levelL ? dbL : this.levelL + (dbL - this.levelL) * 0.18;
       this.levelR = dbR > this.levelR ? dbR : this.levelR + (dbR - this.levelR) * 0.18;
       this.level = dbAll > this.level ? dbAll : this.level + (dbAll - this.level) * 0.18;
+      if (dbAll > this.minDb + 8) this.heardLoud = true;
 
       // sudden sound
       if (this.blocks < 200) { this.smooth = this.blocks === 0 ? dbAll : this.smooth + 0.5 * (dbAll - this.smooth); this.blocks++; }
@@ -119,6 +147,18 @@ export class AudioEngine extends EventTarget {
     const sum = l + r;
     if (sum < 1e-9) return 0;
     return Math.max(-90, Math.min(90, ((r - l) / sum) * 90));
+  }
+
+  /** What the direction display can honestly do with this input.
+      "mono"      one channel arrived, so there is no left or right at all
+      "stereo"    the two sides carry different sound: direction works
+      "dual-mono" two channels, but identical, so direction will always read centre
+      "unknown"   nothing loud enough yet to tell stereo from dual-mono */
+  stereoState() {
+    if (this.realChannels === 0) return "unknown";
+    if (this.realChannels < 2) return "mono";
+    if (this.maxDiff > 0.002) return "stereo";
+    return this.heardLoud ? "dual-mono" : "unknown";
   }
 
   /** 0…1 for the display. */
