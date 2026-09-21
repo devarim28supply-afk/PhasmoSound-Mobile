@@ -2,7 +2,7 @@
    with no signal; the 16 MB sound model and the speech model are cached the first time they
    are fetched, because they are large and not everyone turns captions on. */
 
-const VERSION = "v0.1.7";
+const VERSION = "v0.1.8";
 const SHELL = `shell-${VERSION}`;
 const BIG = `big-${VERSION}`;
 

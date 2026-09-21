@@ -83,29 +83,37 @@ async function showDeviceChooser() {
     return;
   }
 
+  let usable = 0;
   for (const d of ins) {
-    const ch = await probeChannels(d.deviceId);
-    const li = document.createElement("li");
+    const builtIn = BUILT_IN.test(d.label || "");
+    const ch = builtIn ? 0 : await probeChannels(d.deviceId);   // no point opening the phone's own mic
+
     const b = document.createElement("button");
-    if (ch >= 2) b.className = "stereo";
-    const name = d.label || "Unnamed input";
-    const sub = ch >= 2 ? "2 channels — stereo, left and right will work"
-      : ch === 1 ? "1 channel — mono, no left or right"
-      : ch === -1 ? "permission refused" : "will not open";
     b.innerHTML = "<b></b><span class=\"d-sub\"></span>";
-    b.querySelector("b").textContent = name;
-    b.querySelector(".d-sub").textContent = sub;
-    b.disabled = ch <= 0;
-    b.addEventListener("click", () => useInput(d.deviceId));
+    b.querySelector("b").textContent = d.label || "Unnamed input";
+
+    if (builtIn) {
+      // Listed only so it is obvious the scan saw it. This app does not listen to the room.
+      b.classList.add("ignored");
+      b.disabled = true;
+      b.querySelector(".d-sub").textContent = "the phone's own microphone — not used";
+    } else {
+      b.querySelector(".d-sub").textContent = ch >= 2 ? "2 channels — stereo, left and right will work"
+        : ch === 1 ? "1 channel — mono, no left or right"
+        : ch === -1 ? "permission refused" : "will not open";
+      b.disabled = ch <= 0;
+      if (ch >= 2) b.classList.add("stereo");
+      if (ch > 0) { usable++; b.addEventListener("click", () => useInput(d.deviceId)); }
+    }
+
+    const li = document.createElement("li");
     li.appendChild(b);
     box.appendChild(li);
   }
 
-  const anyExternal = ins.some((d) => EXTERNAL.test(d.label || ""));
-  $("start-hint").innerHTML = anyExternal
+  $("start-hint").innerHTML = usable
     ? "Tap the input that is carrying the game."
-    : "<b>Nothing here looks like an audio adapter.</b> If only the phone's own microphones are " +
-      "listed, the cable you plugged in is not an audio input device — see below.<br><br>" +
+    : "<b>Nothing is plugged in that this phone can use as an audio input.</b><br><br>" +
       "<span class=\"dim\">A 3.5 mm cable on its own cannot work: the phone has no way to digitise " +
       "it. The sound has to arrive through something with its own analogue-to-digital converter, " +
       "which means a USB audio interface with a LINE input. Headphone adapters only go the other " +
@@ -184,6 +192,7 @@ async function pickBestInput() {
 
   for (const d of ins) {
     if (!d.deviceId || d.deviceId === "default" || d.deviceId === "communications") continue;
+    if (BUILT_IN.test(d.label || "")) continue;      // never the phone's own microphone
     const ch = await probeChannels(d.deviceId);
     if (ch >= 2) return d.deviceId;                                   // stereo: attached, take it
     if (ch === 1 && !monoExternal && EXTERNAL.test(d.label || "")) monoExternal = d.deviceId;
