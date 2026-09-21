@@ -29,27 +29,138 @@ let currentPage = 0;
 
 // ─────────────────────────────────────────────────────────── start
 
-$("btn-start").addEventListener("click", async () => {
+$("btn-start").addEventListener("click", () => startUp().catch(showStartError));
+
+async function startUp() {
   $("btn-start").disabled = true;
-  $("btn-start").textContent = "starting…";
+  $("btn-start").textContent = "looking for your cable…";
+
+  await speaker.load();
+
+  // The browser will not name any input until it has been allowed one, so take the default,
+  // learn the names, and drop it again straight away. The phone's own microphone is never
+  // listened to: this is only how permission works.
+  await grantPermission();
+
+  const id = await pickBestInput();
+  if (!id) { showNoCable(); return; }
+
+  await engine.start(id);
+  currentInputId = id;
+
+  $("start").hidden = true;
+  $("main").hidden = false;
+  setStatus(true, engine.deviceLabel);
+  await refreshDevices();
+  keepAwake(prefs.wake);
+  startLoops();
+  loadClassifier();
+  if (prefs.captions) enableCaptions();
+}
+
+async function grantPermission() {
+  let s = null;
+  try { s = await navigator.mediaDevices.getUserMedia({ audio: true }); }
+  finally { try { s?.getTracks().forEach((t) => t.stop()); } catch {} }
+}
+
+function showNoCable() {
+  $("btn-start").disabled = false;
+  $("btn-start").textContent = "Look again";
+  $("start-hint").innerHTML =
+    "<b>No cable found.</b> Nothing is plugged into this phone that carries the game's sound, and " +
+    "this app will not listen through the phone's own microphone.<br><br>" +
+    "Plug the cable in and tap <b>Look again</b>.<br><br>" +
+    "<span class=\"dim\">If it is already plugged in, the adapter is not one the phone can use as an " +
+    "audio input. A USB audio interface with a stereo LINE input is what works.</span>";
+}
+
+function showStartError(err) {
+  $("btn-start").disabled = false;
+  $("btn-start").textContent = "Try again";
+  $("start-hint").textContent = "Could not open the audio input: " + (err?.message || err) +
+    ". Check that the page is allowed to use the microphone — the browser needs that permission " +
+    "to see your cable, even though the phone's own microphone is never used.";
+}
+
+/* How many channels this input really hands over. Device names never say, and the track
+   settings lie on some phones, so open it and count what reaches the audio graph. */
+async function probeChannels(deviceId) {
+  for (const want of [{ exact: 2 }, 2]) {
+    let s = null, ctx = null;
+    try {
+      s = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          deviceId: deviceId ? { exact: deviceId } : undefined,
+          echoCancellation: false, noiseSuppression: false, autoGainControl: false,
+          channelCount: want,
+        },
+      });
+      ctx = new (window.AudioContext || window.webkitAudioContext)();
+      let ch = ctx.createMediaStreamSource(s).channelCount;
+      const st = s.getAudioTracks()[0]?.getSettings?.() || {};
+      if (st.channelCount > ch) ch = st.channelCount;
+      return ch;
+    } catch (e) {
+      if (e?.name === "NotAllowedError") return -1;
+    } finally {
+      try { s?.getTracks().forEach((t) => t.stop()); } catch {}
+      try { await ctx?.close(); } catch {}
+    }
+  }
+  return 0;
+}
+
+// A phone's own microphones are always mono, so anything offering two channels is the cable.
+// Failing that, fall back to whatever the label says is external.
+const BUILT_IN = /built|internal|phone mic|front|back|bottom|top mic|camcorder|voice recognition|speakerphone|default/i;
+const EXTERNAL = /usb|headset|wired|adapter|line|digital|dock|external|audio device|uca|interface|dac/i;
+
+/* Find the input carrying the game. Built-in microphones are never returned: if the only thing
+   attached is the phone's own mic, this returns "" and the app refuses to start. */
+async function pickBestInput() {
+  const ins = await listInputs();
+  let external = "";
+
+  for (const d of ins) {
+    if (!d.deviceId || d.deviceId === "default" || d.deviceId === "communications") continue;
+    const label = d.label || "";
+    if (isBuiltIn(label)) continue;                       // never the phone's own microphone
+    const ch = await probeChannels(d.deviceId);
+    if (ch >= 2) return d.deviceId;                       // stereo wins outright
+    if (ch >= 1 && !external) external = d.deviceId;      // mono cable still carries the game
+  }
+  return external;
+}
+
+function isBuiltIn(label) {
+  if (!label) return true;                  // unnamed is not worth risking: it is usually the built-in
+  if (EXTERNAL.test(label)) return false;   // an explicit USB / headset / line name is external
+  return BUILT_IN.test(label) || /^microphone$/i.test(label.trim());
+}
+
+/* Something was plugged in or pulled out. Follow the cable; never drop back to the phone. */
+async function autoPickInput() {
+  if (prefs.inputId) return;                        // an explicit choice always wins
+  let id = "";
+  try { id = await pickBestInput(); } catch {}
+
+  if (!id) {                                        // cable gone
+    await engine.stop();
+    currentInputId = "";
+    setStatus(false, "cable unplugged");
+    return;
+  }
+  if (id === currentInputId && engine.stream) return;
   try {
-    await speaker.load();
-    await engine.start(prefs.inputId);
-    $("start").hidden = true;
-    $("main").hidden = false;
+    await engine.start(id);
+    currentInputId = id;
     setStatus(true, engine.deviceLabel);
     await refreshDevices();
-    keepAwake(prefs.wake);
-    startLoops();
-    loadClassifier();
-    if (prefs.captions) enableCaptions();
-  } catch (e) {
-    $("btn-start").disabled = false;
-    $("btn-start").textContent = "Start listening";
-    $("start-hint").textContent = "Could not open the audio input: " + (e?.message || e) +
-      ". Check that the page is allowed to use the microphone.";
-  }
-});
+  } catch { setStatus(false, "could not open that input"); }
+}
+
+let currentInputId = "";
 
 function setStatus(ok, text) {
   $("status-dot").className = "dot" + (ok ? " on" : "");
@@ -74,38 +185,34 @@ const STEREO_NOTE = {
    hands over. This is the only way to know which adapter works -- the labels never say. */
 async function checkInputs() {
   const out = $("check-out");
-  out.textContent = "checking…";
+  out.textContent = "checking every input…";
   const devices = await listInputs();
-  const lines = [];
+  if (!devices.length) { out.textContent = "No inputs found. Allow the microphone first."; return; }
 
-  for (const d of devices.length ? devices : [{ deviceId: "", label: "default input" }]) {
-    let ch = 0, note = "";
-    for (const want of [{ exact: 2 }, 2]) {
-      try {
-        const s = await navigator.mediaDevices.getUserMedia({
-          audio: {
-            deviceId: d.deviceId ? { exact: d.deviceId } : undefined,
-            echoCancellation: false, noiseSuppression: false, autoGainControl: false,
-            channelCount: want,
-          },
-        });
-        // the track settings lie on some phones, so count the channels the graph really receives
-        const ctx = new (window.AudioContext || window.webkitAudioContext)();
-        ch = ctx.createMediaStreamSource(s).channelCount;
-        const st = s.getAudioTracks()[0]?.getSettings?.() || {};
-        if (st.channelCount > ch) ch = st.channelCount;
-        s.getTracks().forEach((t) => t.stop());
-        await ctx.close();
-        break;
-      } catch (e) { note = e?.name === "OverconstrainedError" ? "" : (e?.name || "blocked"); }
-    }
-    const verdict = ch >= 2 ? "✓ stereo — use this one" : ch === 1 ? "mono, no left/right" : (note || "unavailable");
+  const lines = [];
+  let stereo = null;
+  for (const d of devices) {
+    if (d.deviceId === "default") continue;
+    const ch = await probeChannels(d.deviceId);
+    const verdict = ch >= 2 ? "✓ STEREO — this is your cable"
+      : ch === 1 ? "mono, no left/right"
+      : ch === -1 ? "not allowed" : "unavailable";
+    if (ch >= 2 && !stereo) stereo = d;
     lines.push((d.label || "input") + ": " + verdict);
   }
 
-  out.innerHTML = lines.join("<br>") +
-    "<br><br>If nothing says stereo, the adapter is a headset adapter — its microphone input is " +
-    "mono by design. You need a USB audio interface with a stereo LINE input.";
+  if (stereo) {
+    lines.push("");
+    lines.push("Switching to it now.");
+    prefs.inputId = stereo.deviceId; savePrefs();
+    try { await engine.start(stereo.deviceId); currentInputId = stereo.deviceId; setStatus(true, engine.deviceLabel); } catch {}
+    await refreshDevices();
+  } else {
+    lines.push("");
+    lines.push("Nothing here gives stereo. If an adapter is plugged in, it is a headset adapter — " +
+      "its mic input is mono by design. A USB interface with a stereo LINE input is what works.");
+  }
+  out.innerHTML = lines.join("<br>");
 }
 
 function paintStatus() {
@@ -364,6 +471,12 @@ function renderWheel() {
 
 // ─────────────────────────────────────────────────────────── settings
 
+try {
+  navigator.mediaDevices.addEventListener("devicechange", () => {
+    if (!$("main").hidden) autoPickInput().catch(() => {});
+  });
+} catch {}
+
 $("btn-settings").addEventListener("click", async () => { await refreshDevices(); $("settings").hidden = false; });
 $("btn-settings-close").addEventListener("click", () => ($("settings").hidden = true));
 
@@ -393,8 +506,13 @@ $("btn-check").addEventListener("click", () => { checkInputs().catch((e) => { $(
 
 $("sel-input").addEventListener("change", async (e) => {
   prefs.inputId = e.target.value; savePrefs();
-  try { setStatus(false, "switching…"); await engine.start(prefs.inputId); setStatus(true, engine.deviceLabel); }
-  catch (err) { setStatus(false, "could not open that input"); }
+  if (!prefs.inputId) { await autoPickInput(); return; }   // back to auto
+  try {
+    setStatus(false, "switching…");
+    await engine.start(prefs.inputId);
+    currentInputId = prefs.inputId;
+    setStatus(true, engine.deviceLabel);
+  } catch (err) { setStatus(false, "could not open that input"); }
 });
 $("sel-out").addEventListener("change", async (e) => {
   prefs.outputId = e.target.value; savePrefs();
@@ -403,7 +521,7 @@ $("sel-out").addEventListener("change", async (e) => {
 
 async function refreshDevices() {
   const ins = await listInputs(), outs = await listOutputs();
-  fill($("sel-input"), ins, prefs.inputId, "Default input (phone microphone)");
+  fill($("sel-input"), ins, prefs.inputId, "Auto — follow the cable");
   fill($("sel-out"), outs, prefs.outputId, "Default output");
   $("sel-out").disabled = !("setSinkId" in HTMLMediaElement.prototype);
   if ($("sel-out").disabled) $("sel-out").title = "This browser always uses the default output.";
