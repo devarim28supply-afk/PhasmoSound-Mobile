@@ -30,6 +30,7 @@ let currentPage = 0;
 // ─────────────────────────────────────────────────────────── start
 
 $("btn-start").addEventListener("click", () => startUp().catch(showStartError));
+$("btn-rescan").addEventListener("click", () => showDeviceChooser().catch(showStartError));
 
 async function startUp() {
   $("btn-start").disabled = true;
@@ -64,16 +65,73 @@ async function grantPermission() {
   finally { try { s?.getTracks().forEach((t) => t.stop()); } catch {} }
 }
 
-function showNoCable() {
-  $("btn-start").disabled = false;
-  $("btn-start").textContent = "Look again";
-  $("start-hint").innerHTML =
-    "<b>No cable found.</b> Nothing is plugged into this phone that carries the game's sound, and " +
-    "this app will not listen through the phone's own microphone.<br><br>" +
-    "Plug the cable in and tap <b>Look again</b>.<br><br>" +
-    "<span class=\"dim\">If it is already plugged in, the adapter is not one the phone can use as an " +
-    "audio input. A USB audio interface with a stereo LINE input is what works.</span>";
+/* Show every input the phone admits to, with what each one really delivers, and let the user
+   pick. Guessing from device names was wrong: adapters often report nothing more useful than
+   "Microphone", and throwing those away hid the very cable we were looking for. */
+async function showDeviceChooser() {
+  $("btn-start").hidden = true;
+  $("start-hint").innerHTML = "Scanning…";
+  $("dev-list").hidden = false;
+  const box = $("dev-items");
+  box.innerHTML = "";
+
+  const ins = (await listInputs()).filter((d) => d.deviceId && d.deviceId !== "default" && d.deviceId !== "communications");
+
+  if (!ins.length) {
+    $("start-hint").innerHTML =
+      "<b>This phone reports no audio inputs at all.</b> Allow the microphone permission, then scan again.";
+    return;
+  }
+
+  for (const d of ins) {
+    const ch = await probeChannels(d.deviceId);
+    const li = document.createElement("li");
+    const b = document.createElement("button");
+    if (ch >= 2) b.className = "stereo";
+    const name = d.label || "Unnamed input";
+    const sub = ch >= 2 ? "2 channels — stereo, left and right will work"
+      : ch === 1 ? "1 channel — mono, no left or right"
+      : ch === -1 ? "permission refused" : "will not open";
+    b.innerHTML = "<b></b><span class=\"d-sub\"></span>";
+    b.querySelector("b").textContent = name;
+    b.querySelector(".d-sub").textContent = sub;
+    b.disabled = ch <= 0;
+    b.addEventListener("click", () => useInput(d.deviceId));
+    li.appendChild(b);
+    box.appendChild(li);
+  }
+
+  const anyExternal = ins.some((d) => EXTERNAL.test(d.label || ""));
+  $("start-hint").innerHTML = anyExternal
+    ? "Tap the input that is carrying the game."
+    : "<b>Nothing here looks like an audio adapter.</b> If only the phone's own microphones are " +
+      "listed, the cable you plugged in is not an audio input device — see below.<br><br>" +
+      "<span class=\"dim\">A 3.5 mm cable on its own cannot work: the phone has no way to digitise " +
+      "it. The sound has to arrive through something with its own analogue-to-digital converter, " +
+      "which means a USB audio interface with a LINE input. Headphone adapters only go the other " +
+      "way, and headset adapters carry a mono mic.</span>";
 }
+
+async function useInput(deviceId) {
+  prefs.inputId = deviceId; savePrefs();
+  try {
+    await engine.start(deviceId);
+    currentInputId = deviceId;
+    $("dev-list").hidden = true;
+    $("start").hidden = true;
+    $("main").hidden = false;
+    setStatus(true, engine.deviceLabel);
+    await refreshDevices();
+    keepAwake(prefs.wake);
+    startLoops();
+    loadClassifier();
+    if (prefs.captions) enableCaptions();
+  } catch (err) {
+    $("start-hint").textContent = "That input would not open: " + (err?.message || err);
+  }
+}
+
+function showNoCable() { showDeviceChooser().catch(showStartError); }
 
 function showStartError(err) {
   $("btn-start").disabled = false;
@@ -116,27 +174,21 @@ async function probeChannels(deviceId) {
 const BUILT_IN = /built|internal|phone mic|front|back|bottom|top mic|camcorder|voice recognition|speakerphone|default/i;
 const EXTERNAL = /usb|headset|wired|adapter|line|digital|dock|external|audio device|uca|interface|dac/i;
 
-/* Find the input carrying the game. Built-in microphones are never returned: if the only thing
-   attached is the phone's own mic, this returns "" and the app refuses to start. */
+/* Find the input carrying the game, without trusting device names. A phone's own microphones are
+   always mono, so anything handing over two channels is an attached device whatever it calls
+   itself. Only for mono inputs do we fall back to the name, because there a wrong guess would mean
+   listening to the room. Returns "" when nothing qualifies, and the chooser takes over. */
 async function pickBestInput() {
   const ins = await listInputs();
-  let external = "";
+  let monoExternal = "";
 
   for (const d of ins) {
     if (!d.deviceId || d.deviceId === "default" || d.deviceId === "communications") continue;
-    const label = d.label || "";
-    if (isBuiltIn(label)) continue;                       // never the phone's own microphone
     const ch = await probeChannels(d.deviceId);
-    if (ch >= 2) return d.deviceId;                       // stereo wins outright
-    if (ch >= 1 && !external) external = d.deviceId;      // mono cable still carries the game
+    if (ch >= 2) return d.deviceId;                                   // stereo: attached, take it
+    if (ch === 1 && !monoExternal && EXTERNAL.test(d.label || "")) monoExternal = d.deviceId;
   }
-  return external;
-}
-
-function isBuiltIn(label) {
-  if (!label) return true;                  // unnamed is not worth risking: it is usually the built-in
-  if (EXTERNAL.test(label)) return false;   // an explicit USB / headset / line name is external
-  return BUILT_IN.test(label) || /^microphone$/i.test(label.trim());
+  return monoExternal;
 }
 
 /* Something was plugged in or pulled out. Follow the cable; never drop back to the phone. */
