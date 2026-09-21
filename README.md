@@ -18,7 +18,8 @@ home screen if you want it to feel like an app.
 ## What it shows you
 
 * **Which side a sound came from.** The left and right edges of the screen light up with the sound,
-  brighter and redder as it gets louder.
+  brighter and redder as it gets louder. This needs a **stereo cable** — see below; a phone's own
+  microphone cannot do it.
 * **What the sound was.** `Footsteps`, `Door`, `SLAM`, `KNOCK`, `Breathing`, `WHISPER`, `HEARTBEAT`,
   `PHONE RINGING` and the rest, each with a direction arrow and how long ago it happened. Same model
   and same 237 sound names as the PC version, generated from the same source file.
@@ -28,7 +29,7 @@ home screen if you want it to feel like an app.
 
 ## How the sound gets to the phone
 
-Two ways. Start with the first, it costs nothing.
+Two ways. Only one of them can tell left from right, so read this before buying anything.
 
 ### 1. Let the phone listen (no hardware)
 
@@ -36,19 +37,68 @@ Put the phone near your TV or speakers and let its own microphone hear the game.
 any phone. Good enough for captions and for knowing something happened, weaker in a noisy room, and
 left/right is only as good as the phone's microphones.
 
-### 2. A cable from the controller (better)
+### 2. A cable (the only way to get left and right)
 
-Plug into the **3.5 mm headphone jack on the DualSense** (or your controller / TV headphone out) and
-run that into the phone through a small USB audio adapter. The phone then gets the game's own clean
-stereo, with no room noise, and left/right becomes exact.
+**The trap first, because it costs people money.** A cheap USB-C "headphone and microphone"
+adapter will not work. Its microphone input is **mono by design** — one channel, because it was
+built for a headset boom mic. Plug the game into it and both sides of the screen light off the
+same signal. You need something with a **stereo LINE input**.
 
-That same adapter carries your voice the other way, so when you tap a phrase the team hears it
-through the controller's microphone line. You want an adapter with **both a microphone input and a
-headphone output**, plus a TRRS splitter, roughly 25 dollars in total.
+What works, all class-compliant so there are no drivers:
 
-> A phone **cannot** connect to a PS5 as a Bluetooth headset. Sony reserves the PS5's Bluetooth for
-> controllers and its own headsets, and no phone can present itself as a headset anyway. iPhones
-> never can, and a web page cannot touch Bluetooth audio at all. The cable is the way.
+| | |
+|---|---|
+| **Behringer UCA202** or **UCA222**, about $30 | USB, stereo RCA in and a headphone out, so one box carries both directions |
+| **USB-C OTG adapter**, about $8 | only if your phone has no USB-A; many phones need this |
+| **3.5 mm TRRS splitter**, about $7 | splits the controller jack into audio out and mic in |
+| **3.5 mm to twin RCA cable**, about $7 | game sound into the UCA202 |
+
+### Wiring it to a PS5
+
+The DualSense headphone jack is a TRRS headset jack: stereo out **and** a mic line in. That single
+jack does both jobs.
+
+```
+DualSense 3.5 mm jack
+        │
+   TRRS splitter
+        ├── green (stereo game sound) ──► 3.5 mm-to-RCA ──► UCA202  INPUT
+        └── pink  (mic in) ◄───────────── 3.5 mm cable ◄─── UCA202  PHONES OUT
+                                                              │
+                                                          USB ─┴─► OTG ──► phone
+```
+
+Game sound reaches the phone in true stereo, and the lines you tap on the phrase board go back out
+through the controller's microphone line so your team hears them.
+
+**Turn the phone's volume down before the first test.** The UCA202's headphone output is much
+hotter than a microphone input expects, and a loud signal there is what makes people say you sound
+distorted. Start low and bring it up.
+
+### Wiring it to a TV instead
+
+If you would rather leave the controller alone, take the **TV's headphone jack** (or an HDMI audio
+extractor, about $20, sitting between the console and the TV) into the UCA202 the same way. An
+extractor is better if other people are in the room, because a TV headphone jack usually mutes the
+TV speakers. You lose the way back for your voice, so the phrase board would need the controller
+jack or a USB microphone on the console.
+
+### Check it in the app, do not guess
+
+Settings has **Check this input**. It opens every input your phone has and tells you which one
+gives real stereo, because the device names never say. The bar at the top of the main screen also
+reads **stereo**, **mono**, or **both sides the same** while you play.
+
+**Android is the reliable one.** Chrome on Android passes a USB audio interface through with both
+channels intact. iOS is far more restrictive about multichannel capture in Safari, so on an iPhone
+expect mono — captions and sound names still work, left and right may not.
+
+### 3. Let the phone listen (no hardware, no direction)
+
+Put the phone near the TV and let its own microphone hear the game. Works instantly on any phone
+and is fine for captions and for knowing something happened. It will say **mono**: phones mix
+their microphones down to one channel before a web page ever sees them, so there is no left and
+right on this path. That is a limit of the phone, not of this app.
 
 ## Using it
 
@@ -85,6 +135,8 @@ they were watching.
 
 * **It cannot hear a game running on the same phone.** Neither iOS nor Android lets one app capture
   another app's sound. This is built to watch a TV or monitor, not the phone itself.
+* **Left and right without a cable.** A phone hands a web page one mixed channel from its own
+  microphones, so on that path there is no direction at all and the app says so.
 * **Front and back.** Two channels give left and right only. A sound straight ahead or straight
   behind lands in the middle.
 * **Captions come at pauses**, not word by word, usually within a second of someone finishing.
